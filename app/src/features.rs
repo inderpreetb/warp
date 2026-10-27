@@ -543,5 +543,40 @@ fn enabled_features() -> HashSet<FeatureFlag> {
         FeatureFlag::AcpHarness,
     ]);
 
+    #[cfg(feature = "offline")]
+    apply_offline_overrides(&mut flags);
+
     flags
+}
+
+/// Flags that depend on Warp's servers, an account, or Warp's hosted AI. The
+/// `offline` build turns these off so the app runs without login or network.
+#[cfg(feature = "offline")]
+const OFFLINE_DISABLED_FLAGS: &[FeatureFlag] = &[
+    FeatureFlag::AccountFirstOnboarding,
+    FeatureFlag::AgentMode,
+    FeatureFlag::AgentOnboarding,
+    FeatureFlag::Autoupdate,
+    FeatureFlag::Changelog,
+    FeatureFlag::CloudObjects,
+    FeatureFlag::CocoaSentry,
+    FeatureFlag::CrashReporting,
+    FeatureFlag::CreatingSharedSessions,
+    FeatureFlag::FetchChannelVersionsFromWarpServer,
+    FeatureFlag::ForceLogin,
+    FeatureFlag::LogExpensiveFramesInSentry,
+    FeatureFlag::RecordAppActiveEvents,
+    FeatureFlag::SharedWithMe,
+    FeatureFlag::SshRemoteServer,
+    FeatureFlag::ViewingSharedSessions,
+    FeatureFlag::WithSandboxTelemetry,
+];
+
+#[cfg(feature = "offline")]
+fn apply_offline_overrides(flags: &mut HashSet<FeatureFlag>) {
+    for flag in OFFLINE_DISABLED_FLAGS {
+        flags.remove(flag);
+    }
+    // Go straight to the terminal instead of showing the login screen.
+    flags.insert(FeatureFlag::SkipFirebaseAnonymousUser);
 }
