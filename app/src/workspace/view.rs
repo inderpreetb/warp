@@ -10057,10 +10057,14 @@ impl Workspace {
             }
         }
 
+        if !cfg!(feature = "offline") {
+            items.push(
+                MenuItemFields::new("What's new")
+                    .with_on_select_action(WorkspaceAction::ViewLatestChangelog)
+                    .into_item(),
+            );
+        }
         items.extend([
-            MenuItemFields::new("What's new")
-                .with_on_select_action(WorkspaceAction::ViewLatestChangelog)
-                .into_item(),
             MenuItemFields::new("Settings")
                 .with_on_select_action(WorkspaceAction::ShowSettings)
                 .into_item(),
@@ -10082,6 +10086,11 @@ impl Workspace {
                 .with_on_select_action(WorkspaceAction::ViewLogs)
                 .into_item(),
         );
+
+        // The offline build has no account, so skip the community, sign-up and billing items.
+        if cfg!(feature = "offline") {
+            return items;
+        }
 
         items.extend([
             MenuItemFields::new("Join our Slack community")

@@ -13,8 +13,8 @@ fn main() -> Result<()> {
         ChannelConfig {
             app_id: AppId::new("dev", "warp", "WarpOss"),
             logfile_name: "warp-oss.log".into(),
-            server_config: WarpServerConfig::production(),
-            oz_config: OzConfig::production(),
+            server_config: server_config(),
+            oz_config: oz_config(),
             telemetry_config: None,
             crash_reporting_config: None,
             autoupdate_config: None,
@@ -27,6 +27,41 @@ fn main() -> Result<()> {
     ChannelState::set(state);
 
     warp::run()
+}
+
+/// The `offline` build points every Warp server URL at a closed local port, so
+/// any request that slips through fails immediately instead of leaving the machine.
+#[cfg(feature = "offline")]
+const OFFLINE_SERVER_URL: &str = "http://127.0.0.1:9";
+
+#[cfg(feature = "offline")]
+fn server_config() -> WarpServerConfig {
+    WarpServerConfig {
+        server_root_url: OFFLINE_SERVER_URL.into(),
+        prewarmed_sandbox_control_url: None,
+        rtc_server_url: "ws://127.0.0.1:9/graphql/v2".into(),
+        session_sharing_server_url: None,
+        firebase_auth_api_key: "".into(),
+        iap_config: None,
+    }
+}
+
+#[cfg(not(feature = "offline"))]
+fn server_config() -> WarpServerConfig {
+    WarpServerConfig::production()
+}
+
+#[cfg(feature = "offline")]
+fn oz_config() -> OzConfig {
+    OzConfig {
+        oz_root_url: OFFLINE_SERVER_URL.into(),
+        workload_audience_url: None,
+    }
+}
+
+#[cfg(not(feature = "offline"))]
+fn oz_config() -> OzConfig {
+    OzConfig::production()
 }
 
 // If we're not using an external plist, embed the following as the Info.plist.

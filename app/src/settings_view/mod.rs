@@ -342,6 +342,46 @@ use std::fmt::{self, Display};
 
 use crate::util::bindings::custom_tag_to_keystroke;
 
+/// Settings pages that need a Warp account or Warp's servers. The offline build hides them.
+#[cfg(feature = "offline")]
+const OFFLINE_HIDDEN_SECTIONS: &[SettingsSection] = &[
+    SettingsSection::Account,
+    SettingsSection::AgentMCPServers,
+    SettingsSection::AgentProfiles,
+    SettingsSection::BillingAndUsage,
+    SettingsSection::CloudEnvironments,
+    SettingsSection::CodeIndexing,
+    SettingsSection::Knowledge,
+    SettingsSection::Referrals,
+    SettingsSection::SharedBlocks,
+    SettingsSection::Teams,
+    SettingsSection::WarpAgent,
+    SettingsSection::WarpCloudAgentAPIKeys,
+    SettingsSection::WarpDrive,
+];
+
+/// Drops the pages in [`OFFLINE_HIDDEN_SECTIONS`] from the sidebar, and any umbrella left empty.
+#[cfg(feature = "offline")]
+fn offline_nav_items(nav_items: Vec<SettingsNavItem>) -> Vec<SettingsNavItem> {
+    nav_items
+        .into_iter()
+        .filter_map(|item| match item {
+            SettingsNavItem::Page(section) => (!OFFLINE_HIDDEN_SECTIONS.contains(&section))
+                .then_some(SettingsNavItem::Page(section)),
+            SettingsNavItem::Umbrella(umbrella) => {
+                let subpages: Vec<_> = umbrella
+                    .subpages
+                    .into_iter()
+                    .filter(|section| !OFFLINE_HIDDEN_SECTIONS.contains(section))
+                    .collect();
+                (!subpages.is_empty()).then(|| {
+                    SettingsNavItem::Umbrella(SettingsUmbrella::new(umbrella.label, subpages))
+                })
+            }
+        })
+        .collect()
+}
+
 impl Display for SettingsSection {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -1464,6 +1504,16 @@ impl SettingsView {
             other => other.unwrap_or_default(),
         };
 
+        #[cfg(feature = "offline")]
+        let initial_page = {
+            nav_items = offline_nav_items(nav_items);
+            if OFFLINE_HIDDEN_SECTIONS.contains(&initial_page) {
+                SettingsSection::Appearance
+            } else {
+                initial_page
+            }
+        };
+
         // Auto-expand the umbrella if the initial page is one of its subpages.
         for item in &mut nav_items {
             if let SettingsNavItem::Umbrella(umbrella) = item
@@ -2043,6 +2093,12 @@ impl SettingsView {
         allow_steal_focus: bool,
         ctx: &mut ViewContext<Self>,
     ) {
+        #[cfg(feature = "offline")]
+        let section = if OFFLINE_HIDDEN_SECTIONS.contains(&section) {
+            SettingsSection::Appearance
+        } else {
+            section
+        };
         // Every nav target owns its backing page. Check it exists.
         if self.settings_page(section).is_none() {
             return;
