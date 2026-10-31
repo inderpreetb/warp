@@ -8,6 +8,9 @@ Warp account and never talks to Warp's servers.
 - Every Warp server URL (`app.warp.dev`, `rtc.app.warp.dev`, session sharing,
   Oz) points at a closed local port (`127.0.0.1:9`), so anything that slips
   through fails immediately on the machine. See `app/src/bin/oss.rs`.
+- Firebase is never contacted, even if an earlier Warp build left a saved login
+  on the machine. The offline build has no Firebase API key, so a saved token
+  is never sent to Google. See `crates/warp_server_client/src/auth/session.rs`.
 - The login screen and agent onboarding are skipped; the app opens straight to
   the terminal. Because there is no account, Warp's hosted AI, Warp Drive and
   settings sync stay off.

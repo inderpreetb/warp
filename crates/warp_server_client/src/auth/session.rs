@@ -48,6 +48,13 @@ impl ErrorExt for ProxyTransientError {
 
 register_error!(ProxyTransientError);
 
+/// Returns the Firebase URL for exchanging `token`, or `None` when no API key is configured. Such
+/// builds (including the offline build) must not send the token to Google, because the request
+/// would carry a stored credential off the machine and Firebase would reject it anyway.
+fn direct_token_url(token: &FirebaseToken, api_key: &str) -> Option<String> {
+    (!api_key.is_empty()).then(|| token.access_token_url(api_key))
+}
+
 #[derive(Debug)]
 enum TokenRefreshError {
     Firebase(FirebaseError),
@@ -455,36 +462,43 @@ impl AuthSession {
     fn fetch_auth_tokens(&self, token: FirebaseToken) -> BoxFuture<'static, TokenRefreshResult> {
         let client = self.client.clone();
         let firebase_api_key = ChannelState::firebase_api_key();
-        let direct_url = token.access_token_url(&firebase_api_key);
+        let direct_url = direct_token_url(&token, &firebase_api_key);
         let proxy_url = token.proxy_url(&ChannelState::server_root_url(), &firebase_api_key);
         #[cfg(test)]
-        let (direct_url, proxy_url) = self.refresh_urls.clone().unwrap_or((direct_url, proxy_url));
+        let (direct_url, proxy_url) = match self.refresh_urls.clone() {
+            Some((direct_url, proxy_url)) => (Some(direct_url), proxy_url),
+            None => (direct_url, proxy_url),
+        };
         Box::pin(async move {
             let request_body = token.access_token_request_body();
-            let direct_result = Self::fetch_access_token(
-                client
-                    .post(&direct_url)
-                    .form(&request_body)
-                    .timeout(FETCH_ACCESS_TOKEN_TIMEOUT),
-            )
-            .await;
-            match direct_result {
-                Ok(tokens) => return Ok(tokens),
-                Err(TokenRefreshError::Firebase(error))
-                    if matches!(
-                        UserAuthenticationError::from(error.clone()),
-                        UserAuthenticationError::DeniedAccessToken(_)
-                            | UserAuthenticationError::UserAccountDisabled(_)
-                    ) =>
-                {
-                    return Err(TokenRefreshError::Firebase(error));
-                }
-                Err(
-                    TokenRefreshError::Firebase(_)
-                    | TokenRefreshError::Unexpected(_)
-                    | TokenRefreshError::ProxyTransient { .. },
-                ) => {
-                    log::warn!("Failed to fetch access token from Firebase; falling back to proxy");
+            if let Some(direct_url) = direct_url {
+                let direct_result = Self::fetch_access_token(
+                    client
+                        .post(&direct_url)
+                        .form(&request_body)
+                        .timeout(FETCH_ACCESS_TOKEN_TIMEOUT),
+                )
+                .await;
+                match direct_result {
+                    Ok(tokens) => return Ok(tokens),
+                    Err(TokenRefreshError::Firebase(error))
+                        if matches!(
+                            UserAuthenticationError::from(error.clone()),
+                            UserAuthenticationError::DeniedAccessToken(_)
+                                | UserAuthenticationError::UserAccountDisabled(_)
+                        ) =>
+                    {
+                        return Err(TokenRefreshError::Firebase(error));
+                    }
+                    Err(
+                        TokenRefreshError::Firebase(_)
+                        | TokenRefreshError::Unexpected(_)
+                        | TokenRefreshError::ProxyTransient { .. },
+                    ) => {
+                        log::warn!(
+                            "Failed to fetch access token from Firebase; falling back to proxy"
+                        );
+                    }
                 }
             }
             let response =
