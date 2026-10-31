@@ -12,7 +12,7 @@ use warp_server_auth::credentials::{
 };
 use warp_server_auth::user::FirebaseAuthTokens;
 
-use super::{AuthEvent, AuthSession, UserAuthenticationError, parse_retry_after};
+use super::{AuthEvent, AuthSession, UserAuthenticationError, direct_token_url, parse_retry_after};
 
 fn session_with_state(
     auth_state: Arc<AuthState>,
@@ -801,4 +801,14 @@ fn refresh_result_does_not_overwrite_replaced_credentials() {
     ));
     assert!(event_receiver.try_recv().is_err());
     direct_request.assert();
+}
+
+#[test]
+fn direct_token_url_is_absent_without_api_key() {
+    let token = FirebaseToken::Custom("token".to_string());
+    assert_eq!(direct_token_url(&token, ""), None);
+    assert_eq!(
+        direct_token_url(&token, "key"),
+        Some(token.access_token_url("key"))
+    );
 }
